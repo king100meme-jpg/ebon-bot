@@ -58,15 +58,16 @@ def get_log_channel(guild):
     )
 
 # ==========================================
-# تشغيل البوت والدخول التلقائي للروم فور الإقلاع
+# تشغيل البوت والدخول التلقائي للروم + الحالة الجديدة
 # ==========================================
 
 @bot.event
 async def on_ready():
     print(f"تم تشغيل البوت بنجاح باسم: {bot.user}")
+    # تحديث الحالة إلى طلبك الجديد
     await bot.change_presence(
         activity=discord.Game(
-            name="!help | خدمة السيرفر"
+            name="انا من صنع العم جنتل"
         )
     )
     
@@ -76,7 +77,6 @@ async def on_ready():
     try:
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if channel and isinstance(channel, discord.VoiceChannel):
-            # التأكد أن البوت غير متصل مسبقاً
             if not discord.utils.get(bot.voice_clients, guild=channel.guild):
                 await channel.connect()
                 print(f"✅ [دخول تلقائي] دخل البوت الروم الصوتي بنجاح: {channel.name}")
