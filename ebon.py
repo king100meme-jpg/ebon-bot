@@ -20,7 +20,7 @@ REACTION_CHANNEL_ID = 1559179188987109527
 # رقم الإيموجي المخصص
 REACTION_EMOJI_ID = 1564627151246856362
 
-# روم الصوت الذي سيدخله البوت تلقائياً
+# روم الصوت الذي سيدخله البوت تلقائياً ويبقى فيه 24 ساعة
 VOICE_CHANNEL_ID = 1559179127389691945
 
 # منع السبام
@@ -58,7 +58,7 @@ def get_log_channel(guild):
     )
 
 # ==========================================
-# تشغيل البوت والدخول الفوري للروم
+# تشغيل البوت والبقاء في الروم الصوتي 24 ساعة
 # ==========================================
 
 @bot.event
@@ -70,21 +70,20 @@ async def on_ready():
         )
     )
     
-    await asyncio.sleep(3)
+    # انتظار قصير لضمان استقرار الاتصال بالديسكورد
+    await asyncio.sleep(5)
     
     try:
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if channel and isinstance(channel, discord.VoiceChannel):
-            existing_vc = discord.utils.get(bot.voice_clients, guild=channel.guild)
-            if existing_vc is not None:
-                if existing_vc.channel != channel:
-                    await existing_vc.move_to(channel)
-                    print(f"🔄 تم نقل البوت إلى الروم الصوتي: {channel.name}")
-                else:
-                    print("⚠️ البوت متصل مسبقاً بالروم الصوتي المطلوب.")
-            else:
-                await channel.connect()
-                print(f"✅ دخل البوت الروم الصوتي بنجاح: {channel.name}")
+            # التأكد من قطع أي اتصال سابق عالق لمنع خطأ 4006
+            for vc in bot.voice_clients:
+                if vc.guild == channel.guild:
+                    await vc.disconnect()
+            
+            # الدخول للروم والثبات فيه
+            await channel.connect()
+            print(f"✅ دخل البوت الروم الصوتي بنجاح وثبت فيه: {channel.name}")
         else:
             print(f"❌ لم يتم العثور على الروم الصوتي بالرقم: {VOICE_CHANNEL_ID}")
     except Exception as e:
@@ -398,13 +397,7 @@ async def play(ctx, *, url_or_search: str = None):
 
 @bot.command(name="وقف")
 async def stop_playing(ctx):
-    if (
-        ctx.voice_client
-        and (
-            ctx.voice_client.is_playing()
-            or ctx.voice_client.is_paused()
-        )
-    ):
+    if ctx.voice_client and (ctx.voice_client.is_playing() or ctx.voice_client.is_paused()):
         ctx.voice_client.stop()
         await ctx.reply("⏹️ تم إيقاف الأغنية.")
     else:
