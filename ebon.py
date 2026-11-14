@@ -270,3 +270,202 @@ async def guess(ctx, number: int = None):
         await ctx.reply(
             f"❌ إجابة خاطئة! الرقم الصحيح كان **{secret_num}**"
         )
+
+# ==========================================
+# نظام الأغاني والدخول الفوري
+# ==========================================
+
+FFMPEG_OPTIONS = {
+    "before_options": (
+        "-reconnect 1 -reconnect_streamed 1 "
+        "-reconnect_delay_max 5"
+    ),
+    "options": "-vn"
+}
+
+YTDL_OPTIONS = {
+    "format": "bestaudio/best",
+    "noplaylist": True,
+    "quiet": True
+}
+
+ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+
+@bot.command(name="دخول", aliases=["join"])
+async def join_vc(ctx):
+    if not ctx.author.voice:
+        await ctx.reply("❌ يجب أن تكون متواجدًا في روم صوتي لكي أتمكن من الدخول معك!")
+        return
+    channel = ctx.author.voice.channel
+    try:
+        if ctx.voice_client is not None:
+            await ctx.voice_client.move_to(channel)
+        else:
+            await channel.connect()
+        await ctx.reply(f"✅ تم الدخول بنجاح إلى الروم: **{channel.name}** وجلوس دائم!")
+    except Exception as e:
+        await ctx.reply(f"❌ حدث خطأ أثناء محاولة دخول الروم: {e}")
+
+@bot.command(name="ش")
+async def play(ctx, *, url_or_search: str = None):
+    # إذا لم يكن البوت في روم، سيدخل روم المستخدم تلقائياً
+    if ctx.author.voice:
+        channel = ctx.author.voice.channel
+        try:
+            if ctx.voice_client is None:
+                await channel.connect()
+            elif ctx.voice_client.channel != channel:
+                await ctx.voice_client.move_to(channel)
+        except Exception:
+            pass
+
+    if not url_or_search:
+        await ctx.reply(
+            "❌ اكتب اسم الأغنية أو الرابط! (مثال: !ش Ghost Mary On A Cross)"
+        )
+        return
+
+    try:
+        async with ctx.typing():
+            loop = asyncio.get_running_loop()
+            data = await loop.run_in_executor(
+                None,
+                lambda: ytdl.extract_info(
+                    f"ytsearch1:{url_or_search}",
+                    download=False
+                )
+            )
+
+        if not data or not data.get("entries"):
+            await ctx.reply("❌ ما حصلت الأغنية.")
+            return
+
+        song = data["entries"][0]
+        song_url = song["url"]
+        title = song.get("title", "مقطع صوتي")
+        voice_client = ctx.voice_client
+
+        if voice_client is None:
+            await ctx.reply(
+                "❌ تعذر اتصال البوت بالروم الصوتي. تأكد من دخولك للروم أولاً."
+            )
+            return
+
+        if voice_client.is_playing() or voice_client.is_paused():
+            voice_client.stop()
+
+        source = discord.FFmpegPCMAudio(
+            song_url,
+            **FFMPEG_OPTIONS
+        )
+        voice_client.play(source)
+
+        await ctx.reply(
+            f"🎵 جاري تشغيل: **{title}**"
+        )
+    except Exception as error:
+        print(f"Music error: {error}")
+        await ctx.reply(
+            "❌ صار خطأ أثناء تشغيل الأغنية. تأكد من تثبيت FFmpeg."
+        )
+
+@bot.command(name="وقف")
+async def stop_playing(ctx):
+    if (
+        ctx.voice_client
+        and (
+            ctx.voice_client.is_playing()
+            or ctx.voice_client.is_paused()
+        )
+    ):
+        ctx.voice_client.stop()
+        await ctx.reply("⏹️ تم إيقاف الأغنية.")
+    else:
+        await ctx.reply("❌ لا توجد أغنية تعمل حالياً!")
+
+@bot.command(name="طلوع")
+async def leave_vc(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.reply("👋 تم إيقاف التشغيل ومغادرة الروم الصوتي.")
+    else:
+        await ctx.reply("❌ البوت ليس متصلاً بأي روم صوتي!")
+
+# ==========================================
+# نظام اللوقات
+# ==========================================
+
+@bot.event
+async def on_message_delete(message):
+    if message.guild is None:
+        return
+    if message.author and message.author.bot:
+        return
+
+    log_channel = get_log_channel(message.guild)
+    if log_channel is None:
+        return
+
+    embed = discord.Embed(
+        title="🗑️ تم حذف رسالة",
+        color=discord.Color.red()
+    )
+    if message.author:
+        embed.add_field(
+            name="المرسل:",
+            value=str(message.author),
+            inline=True
+        )
+
+    embed.add_field(
+        name="الروم:",
+        value=getattr(message.channel, "mention", "غير معروف"),
+        inline=True
+    )
+    embed.add_field(
+        name="المحتوى:",
+        value=(
+            message.content[:1000]
+            if message.content
+            else "محتوى غير نصي (صورة/ملف)"
+        ),
+        inline=False
+    )
+    embed.timestamp = discord.utils.utcnow()
+
+    try:
+        await log_channel.send(embed=embed)
+    except discord.HTTPException:
+        pass
+
+@bot.event
+async def on_member_join(member):
+    log_channel = get_log_channel(member.guild)
+    if log_channel is None:
+        return
+
+    embed = discord.Embed(
+        title="📥 انضمام عضو جديد",
+        description=f"مرحباً بك {member.mention} في السيرفر!",
+        color=discord.Color.green()
+    )
+    embed.set_thumbnail(
+        url=member.display_avatar.url
+    )
+    embed.timestamp = discord.utils.utcnow()
+
+    try:
+        await log_channel.send(embed=embed)
+    except discord.HTTPException:
+        pass
+
+# ==========================================
+# تشغيل البوت
+# ==========================================
+
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+if TOKEN is None:
+    print("❌ خطأ: لم يتم العثور على التوكن في متغيرات البيئة (Railway Variables)!")
+else:
+    bot.run(TOKEN)
