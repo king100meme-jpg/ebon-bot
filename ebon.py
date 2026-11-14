@@ -246,59 +246,6 @@ async def broadcast_error(ctx, error):
         await ctx.reply("❌ لا تمتلك صلاحية استخدام هذا الأمر!")
 
 # ==========================================
-# الألعاب
-# ==========================================
-
-@bot.command(name="rps")
-async def rps(ctx, choice: str = None):
-    choices = ["حجر", "ورقة", "مقص"]
-    if choice not in choices:
-        await ctx.reply(
-            "❌ اختر: !rps حجر أو !rps ورقة أو !rps مقص"
-        )
-        return
-
-    bot_choice = random.choice(choices)
-    if choice == bot_choice:
-        await ctx.reply(
-            f"تعادل! 🤝 اخترت **{choice}** وأنا اخترت **{bot_choice}**"
-        )
-        return
-
-    win_rules = {
-        "حجر": "مقص",
-        "ورقة": "حجر",
-        "مقص": "ورقة"
-    }
-
-    if win_rules[choice] == bot_choice:
-        await ctx.reply(
-            f"مبروك فزت! 🎉 اخترت **{choice}** وأنا اخترت **{bot_choice}**"
-        )
-    else:
-        await ctx.reply(
-            f"خسرت! اخترت **{choice}** وأنا اخترت **{bot_choice}**"
-        )
-
-@bot.command(name="guess")
-async def guess(ctx, number: int = None):
-    secret_num = random.randint(1, 10)
-    if number is None or number < 1 or number > 10:
-        await ctx.reply(
-            "❌ خمن رقماً بين 1 و 10! مثال: !guess 5"
-        )
-        return
-
-    if number == secret_num:
-        await ctx.reply(
-            f"🎯 إجابة صحيحة! الرقم هو **{secret_num}**"
-        )
-    else:
-        await ctx.reply(
-            f"❌ إجابة خاطئة! الرقم الصحيح كان **{secret_num}**"
-        )
-
-# ==========================================
 # نظام الأغاني والتحكم الصوتي
 # ==========================================
 
@@ -347,26 +294,36 @@ async def play(ctx, *, url_or_search: str = None):
 
     if not url_or_search:
         await ctx.reply(
-            "❌ اكتب اسم الأغنية أو الرابط! (مثال: !ش Ghost Mary On A Cross)"
+            "❌ اكتب اسم الأغنية أو الرابط (يوتيوب / ساوند كلاود)! (مثال: !ش [الرابط] أو اسم الأغنية)"
         )
         return
 
     try:
         async with ctx.typing():
             loop = asyncio.get_running_loop()
+            
+            # التحقق إذا كان المدخل رابط مباشر أو نص بحث
+            if url_or_search.startswith("http://") or url_or_search.startswith("https://"):
+                search_query = url_or_search
+            else:
+                search_query = f"ytsearch1:{url_or_search}"
+
             data = await loop.run_in_executor(
                 None,
                 lambda: ytdl.extract_info(
-                    f"ytsearch1:{url_or_search}",
+                    search_query,
                     download=False
                 )
             )
 
-        if not data or not data.get("entries"):
-            await ctx.reply("❌ ما حصلت الأغنية.")
-            return
+        if "entries" in data:
+            if not data["entries"]:
+                await ctx.reply("❌ ما حصلت الأغنية أو الرابط غير صالح.")
+                return
+            song = data["entries"][0]
+        else:
+            song = data
 
-        song = data["entries"][0]
         song_url = song["url"]
         title = song.get("title", "مقطع صوتي")
         voice_client = ctx.voice_client
@@ -392,7 +349,7 @@ async def play(ctx, *, url_or_search: str = None):
     except Exception as error:
         print(f"Music error: {error}")
         await ctx.reply(
-            "❌ صار خطأ أثناء تشغيل الأغنية. تأكد من تثبيت FFmpeg."
+            "❌ صار خطأ أثناء تشغيل الأغنية. تأكد من صحة الرابط أو تثبيت FFmpeg."
         )
 
 @bot.command(name="وقف")
@@ -412,7 +369,7 @@ async def leave_vc(ctx):
         await ctx.reply("❌ البوت ليس متصلاً بأي روم صوتي!")
 
 # ==========================================
-# نظام اللوقات
+# نظام اللوقات (حذف رسائل فقط)
 # ==========================================
 
 @bot.event
@@ -450,27 +407,6 @@ async def on_message_delete(message):
             else "محتوى غير نصي (صورة/ملف)"
         ),
         inline=False
-    )
-    embed.timestamp = discord.utils.utcnow()
-
-    try:
-        await log_channel.send(embed=embed)
-    except discord.HTTPException:
-        pass
-
-@bot.event
-async def on_member_join(member):
-    log_channel = get_log_channel(member.guild)
-    if log_channel is None:
-        return
-
-    embed = discord.Embed(
-        title="📥 انضمام عضو جديد",
-        description=f"مرحباً بك {member.mention} في السيرفر!",
-        color=discord.Color.green()
-    )
-    embed.set_thumbnail(
-        url=member.display_avatar.url
     )
     embed.timestamp = discord.utils.utcnow()
 
