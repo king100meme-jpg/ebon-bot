@@ -75,11 +75,16 @@ async def on_ready():
     try:
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if channel and isinstance(channel, discord.VoiceChannel):
-            if not discord.utils.get(bot.voice_clients, guild=channel.guild):
+            existing_vc = discord.utils.get(bot.voice_clients, guild=channel.guild)
+            if existing_vc is not None:
+                if existing_vc.channel != channel:
+                    await existing_vc.move_to(channel)
+                    print(f"🔄 تم نقل البوت إلى الروم الصوتي: {channel.name}")
+                else:
+                    print("⚠️ البوت متصل مسبقاً بالروم الصوتي المطلوب.")
+            else:
                 await channel.connect()
                 print(f"✅ دخل البوت الروم الصوتي بنجاح: {channel.name}")
-            else:
-                print("⚠️ البوت متصل مسبقاً بالروم الصوتي.")
         else:
             print(f"❌ لم يتم العثور على الروم الصوتي بالرقم: {VOICE_CHANNEL_ID}")
     except Exception as e:
