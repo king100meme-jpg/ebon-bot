@@ -7,7 +7,6 @@ import discord
 from discord.ext import commands
 import yt_dlp
 
-
 # ==========================================
 # إعدادات البوت
 # ==========================================
@@ -36,29 +35,24 @@ bot = commands.Bot(
     intents=intents
 )
 
-
 # ==========================================
 # أدوات مساعدة
 # ==========================================
 
 def get_reaction_emoji(guild):
     emoji = guild.get_emoji(REACTION_EMOJI_ID)
-
     if emoji is not None:
         return emoji
-
     return discord.PartialEmoji(
         name="emoji",
         id=REACTION_EMOJI_ID
     )
-
 
 def get_log_channel(guild):
     return discord.utils.get(
         guild.text_channels,
         name=LOG_CHANNEL_NAME
     )
-
 
 # ==========================================
 # تشغيل البوت
@@ -67,13 +61,11 @@ def get_log_channel(guild):
 @bot.event
 async def on_ready():
     print(f"تم تشغيل البوت بنجاح باسم: {bot.user}")
-
     await bot.change_presence(
         activity=discord.Game(
             name="!help | خدمة السيرفر"
         )
     )
-
 
 # ==========================================
 # الحماية + الرياكشن التلقائي
@@ -81,7 +73,6 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-
     if message.author.bot or message.guild is None:
         await bot.process_commands(message)
         return
@@ -91,21 +82,17 @@ async def on_message(message):
         try:
             emoji = get_reaction_emoji(message.guild)
             await message.add_reaction(emoji)
-
         except discord.HTTPException as error:
             print(f"خطأ الرياكشن: {error}")
 
     # منع الروابط باستثناء الإداريين
     content_lower = message.content.lower()
-
     if (
         "http://" in content_lower
         or "https://" in content_lower
         or "www." in content_lower
     ):
-
         if not message.author.guild_permissions.administrator:
-
             try:
                 await message.delete()
             except discord.HTTPException:
@@ -117,7 +104,6 @@ async def on_message(message):
                 )
             except discord.HTTPException:
                 pass
-
             return
 
     # منع السبام
@@ -125,9 +111,7 @@ async def on_message(message):
         message.guild.id,
         message.author.id
     )
-
     current_time = time.time()
-
     last_time, count = message_log.get(
         user_id,
         (0, 0)
@@ -144,7 +128,6 @@ async def on_message(message):
     )
 
     if count > 4:
-
         try:
             await message.delete()
         except discord.HTTPException:
@@ -156,11 +139,9 @@ async def on_message(message):
             )
         except discord.HTTPException:
             pass
-
         return
 
     await bot.process_commands(message)
-
 
 # ==========================================
 # البرودكاست
@@ -172,7 +153,6 @@ async def on_message(message):
 )
 @commands.has_permissions(administrator=True)
 async def broadcast(ctx, *, msg: str = None):
-
     if not msg:
         await ctx.reply(
             "❌ يرجى كتابة الرسالة المراد إرسالها!"
@@ -191,20 +171,16 @@ async def broadcast(ctx, *, msg: str = None):
         description=msg,
         color=discord.Color.blue()
     )
-
     embed.set_footer(
         text=f"أُرسلت بواسطة {ctx.author}"
     )
 
     for member in ctx.guild.members:
-
         if member.bot:
             continue
-
         try:
             await member.send(embed=embed)
             success_count += 1
-
         except (discord.Forbidden, discord.HTTPException):
             fail_count += 1
 
@@ -216,15 +192,12 @@ async def broadcast(ctx, *, msg: str = None):
         )
     )
 
-
 @broadcast.error
 async def broadcast_error(ctx, error):
-
     if isinstance(error, commands.MissingPermissions):
         await ctx.reply(
             "❌ لا تمتلك صلاحية استخدام هذا الأمر!"
         )
-
 
 # ==========================================
 # الألعاب
@@ -232,9 +205,7 @@ async def broadcast_error(ctx, error):
 
 @bot.command(name="rps")
 async def rps(ctx, choice: str = None):
-
     choices = ["حجر", "ورقة", "مقص"]
-
     if choice not in choices:
         await ctx.reply(
             "❌ اختر: !rps حجر أو !rps ورقة أو !rps مقص"
@@ -242,12 +213,9 @@ async def rps(ctx, choice: str = None):
         return
 
     bot_choice = random.choice(choices)
-
     if choice == bot_choice:
-
         await ctx.reply(
-            f"تعادل! 🤝 اخترت **{choice}** "
-            f"وأنا اخترت **{bot_choice}**"
+            f"تعادل! 🤝 اخترت **{choice}** وأنا اخترت **{bot_choice}**"
         )
         return
 
@@ -258,25 +226,17 @@ async def rps(ctx, choice: str = None):
     }
 
     if win_rules[choice] == bot_choice:
-
         await ctx.reply(
-            f"مبروك فزت! 🎉 اخترت **{choice}** "
-            f"وأنا اخترت **{bot_choice}**"
+            f"مبروك فزت! 🎉 اخترت **{choice}** وأنا اخترت **{bot_choice}**"
         )
-
     else:
-
         await ctx.reply(
-            f"خسرت! اخترت **{choice}** "
-            f"وأنا اخترت **{bot_choice}**"
+            f"خسرت! اخترت **{choice}** وأنا اخترت **{bot_choice}**"
         )
-
 
 @bot.command(name="guess")
 async def guess(ctx, number: int = None):
-
     secret_num = random.randint(1, 10)
-
     if number is None or number < 1 or number > 10:
         await ctx.reply(
             "❌ خمن رقماً بين 1 و 10! مثال: !guess 5"
@@ -284,21 +244,16 @@ async def guess(ctx, number: int = None):
         return
 
     if number == secret_num:
-
         await ctx.reply(
             f"🎯 إجابة صحيحة! الرقم هو **{secret_num}**"
         )
-
     else:
-
         await ctx.reply(
             f"❌ إجابة خاطئة! الرقم الصحيح كان **{secret_num}**"
         )
 
-
 # ==========================================
 # نظام الأغاني
-# يتطلب تثبيت FFmpeg على الاستضافة
 # ==========================================
 
 FFMPEG_OPTIONS = {
@@ -317,10 +272,8 @@ YTDL_OPTIONS = {
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 
-
 @bot.command(name="ش")
 async def play(ctx, *, url_or_search: str = None):
-
     if not ctx.author.voice:
         await ctx.reply(
             "❌ يجب أن تكون متواجدًا في روم صوتي أولاً!"
@@ -336,17 +289,13 @@ async def play(ctx, *, url_or_search: str = None):
     channel = ctx.author.voice.channel
 
     try:
-
         if ctx.voice_client is None:
             await channel.connect()
-
         elif ctx.voice_client.channel != channel:
             await ctx.voice_client.move_to(channel)
 
         async with ctx.typing():
-
             loop = asyncio.get_running_loop()
-
             data = await loop.run_in_executor(
                 None,
                 lambda: ytdl.extract_info(
@@ -360,10 +309,8 @@ async def play(ctx, *, url_or_search: str = None):
             return
 
         song = data["entries"][0]
-
         song_url = song["url"]
         title = song.get("title", "مقطع صوتي")
-
         voice_client = ctx.voice_client
 
         if voice_client is None:
@@ -379,25 +326,19 @@ async def play(ctx, *, url_or_search: str = None):
             song_url,
             **FFMPEG_OPTIONS
         )
-
         voice_client.play(source)
 
         await ctx.reply(
             f"🎵 جاري تشغيل: **{title}**"
         )
-
     except Exception as error:
-
         print(f"Music error: {error}")
-
         await ctx.reply(
             "❌ صار خطأ أثناء تشغيل الأغنية. تأكد من تثبيت FFmpeg."
         )
 
-
 @bot.command(name="وقف")
 async def stop_playing(ctx):
-
     if (
         ctx.voice_client
         and (
@@ -405,37 +346,18 @@ async def stop_playing(ctx):
             or ctx.voice_client.is_paused()
         )
     ):
-
         ctx.voice_client.stop()
-
-        await ctx.reply(
-            "⏹️ تم إيقاف الأغنية."
-        )
-
+        await ctx.reply("⏹️ تم إيقاف الأغنية.")
     else:
-
-        await ctx.reply(
-            "❌ لا توجد أغنية تعمل حالياً!"
-        )
-
+        await ctx.reply("❌ لا توجد أغنية تعمل حالياً!")
 
 @bot.command(name="طلوع")
 async def leave_vc(ctx):
-
     if ctx.voice_client:
-
         await ctx.voice_client.disconnect()
-
-        await ctx.reply(
-            "👋 تم إيقاف التشغيل ومغادرة الروم الصوتي."
-        )
-
+        await ctx.reply("👋 تم إيقاف التشغيل ومغادرة الروم الصوتي.")
     else:
-
-        await ctx.reply(
-            "❌ البوت ليس متصلاً بأي روم صوتي!"
-        )
-
+        await ctx.reply("❌ البوت ليس متصلاً بأي روم صوتي!")
 
 # ==========================================
 # نظام اللوقات
@@ -443,15 +365,12 @@ async def leave_vc(ctx):
 
 @bot.event
 async def on_message_delete(message):
-
     if message.guild is None:
         return
-
     if message.author and message.author.bot:
         return
 
     log_channel = get_log_channel(message.guild)
-
     if log_channel is None:
         return
 
@@ -459,7 +378,6 @@ async def on_message_delete(message):
         title="🗑️ تم حذف رسالة",
         color=discord.Color.red()
     )
-
     if message.author:
         embed.add_field(
             name="المرسل:",
@@ -472,7 +390,6 @@ async def on_message_delete(message):
         value=getattr(message.channel, "mention", "غير معروف"),
         inline=True
     )
-
     embed.add_field(
         name="المحتوى:",
         value=(
@@ -482,7 +399,6 @@ async def on_message_delete(message):
         ),
         inline=False
     )
-
     embed.timestamp = discord.utils.utcnow()
 
     try:
@@ -490,12 +406,9 @@ async def on_message_delete(message):
     except discord.HTTPException:
         pass
 
-
 @bot.event
 async def on_member_join(member):
-
     log_channel = get_log_channel(member.guild)
-
     if log_channel is None:
         return
 
@@ -504,11 +417,9 @@ async def on_member_join(member):
         description=f"مرحباً بك {member.mention} في السيرفر!",
         color=discord.Color.green()
     )
-
     embed.set_thumbnail(
         url=member.display_avatar.url
     )
-
     embed.timestamp = discord.utils.utcnow()
 
     try:
@@ -516,11 +427,13 @@ async def on_member_join(member):
     except discord.HTTPException:
         pass
 
-
 # ==========================================
 # تشغيل البوت
 # ==========================================
 
-TOKEN = "MTU2OTcyMDAyODUxMTg3MTA0OA.GBsDEP.Y-PoftD5C52n38HW7qSoUioiUqn_2WXFZ4vqnY"
+TOKEN = os.getenv("DISCORD_TOKEN")
 
-bot.run(TOKEN)
+if TOKEN is None:
+    print("❌ خطأ: لم يتم العثور على التوكن في متغيرات البيئة (Railway Variables)!")
+else:
+    bot.run(TOKEN)
