@@ -20,7 +20,7 @@ REACTION_CHANNEL_ID = 1559179188987109527
 # رقم الإيموجي المخصص
 REACTION_EMOJI_ID = 1564627151246856362
 
-# روم الصوت الذي سيدخله البوت تلقائياً 24/7
+# روم الصوت الذي سيدخله البوت تلقائياً
 VOICE_CHANNEL_ID = 1559179127389691945
 
 # منع السبام
@@ -57,28 +57,8 @@ def get_log_channel(guild):
         name=LOG_CHANNEL_NAME
     )
 
-async def ensure_voice_connection():
-    """دالة لضمان بقاء البوت داخل الروم الصوتي دائماً"""
-    await bot.wait_until_ready()
-    while not bot.is_closed():
-        await asyncio.sleep(10)
-        try:
-            channel = bot.get_channel(VOICE_CHANNEL_ID)
-            if channel and isinstance(channel, discord.VoiceChannel):
-                voice_client = discord.utils.get(bot.voice_clients, guild=channel.guild)
-                if voice_client is None or not voice_client.is_connected():
-                    try:
-                        await channel.connect()
-                        print(f"🔄 [إعادة اتصال تلقائي] تم إرجاع البوت للروم الصوتي بنجاح: {channel.name}")
-                    except Exception as e:
-                        print(f"❌ خطأ في إعادة الاتصال الصوتي: {e}")
-                elif voice_client.channel.id != channel.id:
-                    await voice_client.move_to(channel)
-        except Exception as e:
-            print(f"❌ خطأ في مراقبة الاتصال الصوتي: {e}")
-
 # ==========================================
-# تشغيل البوت والدخول التلقائي للروم
+# تشغيل البوت والدخول الفوري للروم
 # ==========================================
 
 @bot.event
@@ -90,8 +70,20 @@ async def on_ready():
         )
     )
     
-    # تشغيل مهمة مراقبة البقاء في الروم 24/7
-    bot.loop.create_task(ensure_voice_connection())
+    await asyncio.sleep(3)
+    
+    try:
+        channel = bot.get_channel(VOICE_CHANNEL_ID)
+        if channel and isinstance(channel, discord.VoiceChannel):
+            if not discord.utils.get(bot.voice_clients, guild=channel.guild):
+                await channel.connect()
+                print(f"✅ دخل البوت الروم الصوتي بنجاح: {channel.name}")
+            else:
+                print("⚠️ البوت متصل مسبقاً بالروم الصوتي.")
+        else:
+            print(f"❌ لم يتم العثور على الروم الصوتي بالرقم: {VOICE_CHANNEL_ID}")
+    except Exception as e:
+        print(f"❌ خطأ أثناء محاولة دخول الروم الصوتي: {e}")
 
 # ==========================================
 # الحماية + الرياكشن التلقائي
@@ -279,7 +271,7 @@ async def guess(ctx, number: int = None):
         )
 
 # ==========================================
-# نظام الأغاني والتشغيل المستمر
+# نظام الأغاني والتحكم الصوتي
 # ==========================================
 
 FFMPEG_OPTIONS = {
@@ -371,3 +363,107 @@ async def play(ctx, *, url_or_search: str = None):
         )
     except Exception as error:
         print(f"Music error: {error}")
+        await ctx.reply(
+            "❌ صار خطأ أثناء تشغيل الأغنية. تأكد من تثبيت FFmpeg."
+        )
+
+@bot.command(name="وقف")
+async def stop_playing(ctx):
+    if (
+        ctx.voice_client
+        and (
+            ctx.voice_client.is_playing()
+            or ctx.voice_client.is_paused()
+        )
+    ):
+        ctx.voice_client.stop()
+        await ctx.reply("⏹️ تم إيقاف الأغنية.")
+    else:
+        await ctx.reply("❌ لا توجد أغنية تعمل حالياً!")
+
+@bot.command(name="طلوع")
+async def leave_vc(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.reply("👋 تم إيقاف التشغيل ومغادرة الروم الصوتي.")
+    else:
+        await ctx.reply("❌ البوت ليس متصلاً بأي روم صوتي!")
+
+# ==========================================
+# نظام اللوقات
+# ==========================================
+
+@bot.event
+async def on_message_delete(message):
+    if message.guild is None:
+        return
+    if message.author and message.author.bot:
+        return
+
+    log_channel = get_log_channel(message.guild)
+    if log_channel is None:
+        return
+
+    embed = discord.Embed(
+        title="🗑️ تم حذف رسالة",
+        color=discord.Color.red()
+    )
+    if message.author:
+        embed.add_field(
+            name="المرسل:",
+            value=str(message.author),
+            inline=True
+        )
+
+    embed.add_field(
+        name="الروم:",
+        value=getattr(message.channel, "mention", "غير معروف"),
+        inline=True
+    )
+    embed.add_field(
+        name="المحتوى:",
+        value=(
+            message.content[:1000]
+            if message.content
+            else "محتوى غير نصي (صورة/ملف)"
+        ),
+        inline=False
+    )
+    embed.timestamp = discord.utils.utcnow()
+
+    try:
+        await log_channel.send(embed=embed)
+    except discord.HTTPException:
+        pass
+
+@bot.event
+async def on_member_join(member):
+    log_channel = get_log_channel(member.guild)
+    if log_channel is None:
+        return
+
+    embed = discord.Embed(
+        title="📥 انضمام عضو جديد",
+        description=f"مرحباً بك {member.mention} في السيرفر!",
+        color=discord.Color.green()
+    )
+    embed.set_thumbnail(
+        url=member.display_avatar.url
+    )
+    embed.timestamp = discord.utils.utcnow()
+
+    try:
+        await log_channel.send(embed=embed)
+    except discord.HTTPException:
+        pass
+
+# ==========================================
+# تشغيل البوت
+# ==========================================
+
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+if TOKEN is None:
+    print("❌ خطأ: لم يتم العثور على التوكن في متغيرات البيئة (Railway Variables)!")
+else:
+    bot.run(TOKEN)
