@@ -20,7 +20,7 @@ REACTION_CHANNEL_ID = 1559179188987109527
 # رقم الإيموجي المخصص
 REACTION_EMOJI_ID = 1564627151246856362
 
-# روم الصوت الذي سيدخله البوت تلقائياً 24/7
+# روم الصوت الذي سيدخله البوت تلقائياً أول ما يشتغل 24/7
 VOICE_CHANNEL_ID = 1559179127389691945
 
 # منع السبام
@@ -58,7 +58,7 @@ def get_log_channel(guild):
     )
 
 # ==========================================
-# تشغيل البوت ودخول الروم الصوتي تلقائياً
+# تشغيل البوت والدخول التلقائي للروم فور الإقلاع
 # ==========================================
 
 @bot.event
@@ -70,21 +70,22 @@ async def on_ready():
         )
     )
     
-    # الانتظار لمدة 3 ثوانٍ لضمان تحميل ديسكورد للرومات بالكامل
-    await asyncio.sleep(3)
+    # الانتظار لمدة 4 ثوانٍ لضمان استقرار اتصال ديسكورد وتحميل القنوات الصوتية بالكامل
+    await asyncio.sleep(4)
     
     try:
         channel = bot.get_channel(VOICE_CHANNEL_ID)
         if channel and isinstance(channel, discord.VoiceChannel):
+            # التأكد أن البوت غير متصل مسبقاً
             if not discord.utils.get(bot.voice_clients, guild=channel.guild):
                 await channel.connect()
-                print(f"✅ دخل البوت الروم الصوتي بنجاح: {channel.name}")
+                print(f"✅ [دخول تلقائي] دخل البوت الروم الصوتي بنجاح: {channel.name}")
             else:
                 print("⚠️ البوت متصل مسبقاً بالروم الصوتي.")
         else:
             print(f"❌ لم يتم العثور على الروم الصوتي بالرقم: {VOICE_CHANNEL_ID}")
     except Exception as e:
-        print(f"❌ خطأ أثناء محاولة دخول الروم الصوتي: {e}")
+        print(f"❌ خطأ أثناء محاولة الدخول التلقائي للروم: {e}")
 
 # ==========================================
 # الحماية + الرياكشن التلقائي
@@ -272,7 +273,7 @@ async def guess(ctx, number: int = None):
         )
 
 # ==========================================
-# نظام الأغاني والدخول الفوري
+# نظام الأغاني والتحكم الصوتي
 # ==========================================
 
 FFMPEG_OPTIONS = {
@@ -302,13 +303,12 @@ async def join_vc(ctx):
             await ctx.voice_client.move_to(channel)
         else:
             await channel.connect()
-        await ctx.reply(f"✅ تم الدخول بنجاح إلى الروم: **{channel.name}** وجلوس دائم!")
+        await ctx.reply(f"✅ تم الدخول بنجاح إلى الروم: **{channel.name}**")
     except Exception as e:
         await ctx.reply(f"❌ حدث خطأ أثناء محاولة دخول الروم: {e}")
 
 @bot.command(name="ش")
 async def play(ctx, *, url_or_search: str = None):
-    # إذا لم يكن البوت في روم، سيدخل روم المستخدم تلقائياً
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         try:
@@ -347,7 +347,7 @@ async def play(ctx, *, url_or_search: str = None):
 
         if voice_client is None:
             await ctx.reply(
-                "❌ تعذر اتصال البوت بالروم الصوتي. تأكد من دخولك للروم أولاً."
+                "❌ تعذر اتصال البوت بالروم الصوتي."
             )
             return
 
