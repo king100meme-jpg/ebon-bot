@@ -162,9 +162,10 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================================
-# البرودكاست
+# أوامر البرودكاست (للأعضاء وللإدارة)
 # ==========================================
 
+# 1. برودكاست للأعضاء (!bc)
 @bot.command(
     name="bc",
     aliases=["broadcast"]
@@ -172,14 +173,10 @@ async def on_message(message):
 @commands.has_permissions(administrator=True)
 async def broadcast(ctx, *, msg: str = None):
     if not msg:
-        await ctx.reply(
-            "❌ يرجى كتابة الرسالة المراد إرسالها!"
-        )
+        await ctx.reply("❌ يرجى كتابة الرسالة المراد إرسالها للأعضاء!")
         return
 
-    status_msg = await ctx.send(
-        "⏳ جاري إرسال البرودكاست..."
-    )
+    status_msg = await ctx.send("⏳ جاري إرسال البرودكاست للأعضاء...")
 
     success_count = 0
     fail_count = 0
@@ -189,9 +186,7 @@ async def broadcast(ctx, *, msg: str = None):
         description=msg,
         color=discord.Color.blue()
     )
-    embed.set_footer(
-        text=f"أُرسلت بواسطة {ctx.author}"
-    )
+    embed.set_footer(text=f"أُرسلت بواسطة {ctx.author}")
 
     for member in ctx.guild.members:
         if member.bot:
@@ -204,18 +199,57 @@ async def broadcast(ctx, *, msg: str = None):
 
     await status_msg.edit(
         content=(
-            "✅ اكتمل البرودكاست:\n"
+            "✅ اكتمل برودكاست الأعضاء:\n"
             f"**تم الإرسال لـ:** {success_count} عضو\n"
             f"**فشل الإرسال لـ:** {fail_count} عضو"
         )
     )
 
+# 2. برودكاست للإدارة فقط (!bca)
+@bot.command(
+    name="bca",
+    aliases=["adminbc"]
+)
+@commands.has_permissions(administrator=True)
+async def admin_broadcast(ctx, *, msg: str = None):
+    if not msg:
+        await ctx.reply("❌ يرجى كتابة الرسالة المراد إرسالها للإدارة!")
+        return
+
+    status_msg = await ctx.send("⏳ جاري إرسال البرودكاست للإداريين فقط...")
+
+    success_count = 0
+    fail_count = 0
+
+    embed = discord.Embed(
+        title=f"🔒 رسالة إدارية خاصة للإدارة في {ctx.guild.name}",
+        description=msg,
+        color=discord.Color.red()
+    )
+    embed.set_footer(text=f"أُرسلت بواسطة {ctx.author}")
+
+    for member in ctx.guild.members:
+        if member.bot or not member.guild_permissions.administrator:
+            continue
+        try:
+            await member.send(embed=embed)
+            success_count += 1
+        except (discord.Forbidden, discord.HTTPException):
+            fail_count += 1
+
+    await status_msg.edit(
+        content=(
+            "✅ اكتمل برودكاست الإدارة:\n"
+            f"**تم الإرسال لـ:** {success_count} إداري\n"
+            f"**فشل الإرسال لـ:** {fail_count} إداري"
+        )
+    )
+
 @broadcast.error
+@admin_broadcast.error
 async def broadcast_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
-        await ctx.reply(
-            "❌ لا تمتلك صلاحية استخدام هذا الأمر!"
-        )
+        await ctx.reply("❌ لا تمتلك صلاحية استخدام هذا الأمر!")
 
 # ==========================================
 # الألعاب
