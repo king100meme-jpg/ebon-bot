@@ -162,7 +162,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================================
-# أوامر البرودكاست (للأعضاء وللإدارة)
+# أوامر البرودكاست (نص عادي مع منشن المرسل)
 # ==========================================
 
 # 1. برودكاست للأعضاء (!bc)
@@ -181,18 +181,13 @@ async def broadcast(ctx, *, msg: str = None):
     success_count = 0
     fail_count = 0
 
-    embed = discord.Embed(
-        title=f"📢 رسالة إدارية من {ctx.guild.name}",
-        description=msg,
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"أُرسلت بواسطة {ctx.author}")
+    formatted_msg = f"{msg}\n\n— المرسل: {ctx.author.mention}"
 
     for member in ctx.guild.members:
         if member.bot:
             continue
         try:
-            await member.send(embed=embed)
+            await member.send(formatted_msg)
             success_count += 1
         except (discord.Forbidden, discord.HTTPException):
             fail_count += 1
@@ -221,18 +216,13 @@ async def admin_broadcast(ctx, *, msg: str = None):
     success_count = 0
     fail_count = 0
 
-    embed = discord.Embed(
-        title=f"🔒 رسالة إدارية خاصة للإدارة في {ctx.guild.name}",
-        description=msg,
-        color=discord.Color.red()
-    )
-    embed.set_footer(text=f"أُرسلت بواسطة {ctx.author}")
+    formatted_msg = f"🔒 **[رسالة إدارية]**\n{msg}\n\n— المرسل: {ctx.author.mention}"
 
     for member in ctx.guild.members:
         if member.bot or not member.guild_permissions.administrator:
             continue
         try:
-            await member.send(embed=embed)
+            await member.send(formatted_msg)
             success_count += 1
         except (discord.Forbidden, discord.HTTPException):
             fail_count += 1
