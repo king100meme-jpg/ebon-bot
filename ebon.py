@@ -166,10 +166,28 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================================
-# أوامر البرودكاست (نص عادي مع منشن المرسل)
+# أوامر الإرسال والبرودكاست
 # ==========================================
 
-# 1. برودكاست للأعضاء (!bc)
+# 1. أمر إرسال رسالة إدارية بالتنسيق المطلوب في الشات (!say)
+@bot.command(name="say")
+@commands.has_permissions(administrator=True)
+async def say_admin_msg(ctx, member: discord.Member, *, message: str = None):
+    if not message:
+        await ctx.reply("❌ يرجى كتابة الرسالة الإدارية بعد منشن الشخص!")
+        return
+    
+    # حذف رسالة الأمر لتنظيف الشات
+    try:
+        await ctx.message.delete()
+    except discord.HTTPException:
+        pass
+    
+    # تنسيق الرسالة تماماً مثل الصورة المطلوبة
+    formatted_content = f"🔒 **[رسالة إدارية]**\n{message}\n\n— المرسل: {member.mention}"
+    await ctx.send(formatted_content)
+
+# 2. برودكاست للأعضاء (!bc)
 @bot.command(
     name="bc",
     aliases=["broadcast"]
@@ -204,7 +222,7 @@ async def broadcast(ctx, *, msg: str = None):
         )
     )
 
-# 2. برودكاست للإدارة فقط (!bca)
+# 3. برودكاست للإدارة فقط (!bca) بالتنسيق الجديد
 @bot.command(
     name="bca",
     aliases=["adminbc"]
@@ -239,6 +257,7 @@ async def admin_broadcast(ctx, *, msg: str = None):
         )
     )
 
+@say_admin_msg.error
 @broadcast.error
 @admin_broadcast.error
 async def broadcast_error(ctx, error):
