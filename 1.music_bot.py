@@ -8,7 +8,8 @@ import yt_dlp
 # إعدادات بوت الأغاني
 # ==========================================
 
-COMMAND_PREFIX = "!"
+# تم تغيير البادئة إلى # لتجنب التداخل مع البوتات الأخرى
+COMMAND_PREFIX = "#"
 
 # 🟢 حط هنا "أيدي الروم الصوتي" اللي نسخته (انسخ الرقم وحطه بين العلامتين)
 VOICE_CHANNEL_ID = 1559179128807227523
@@ -33,7 +34,7 @@ async def on_ready():
     print(f"تم تشغيل بوت الأغاني بنجاح باسم: {bot.user}")
     await bot.change_presence(
         activity=discord.Game(
-            name="!ش [اسم الأغنية]"
+            name="#ش [اسم الأغنية]"
         )
     )
     
@@ -104,7 +105,7 @@ async def play(ctx, *, url_or_search: str = None):
             pass
 
     if not url_or_search:
-        await ctx.reply("❌ اكتب اسم الأغنية أو الرابط! (مثال: !ش [اسم الأغنية أو الرابط])")
+        await ctx.reply("❌ اكتب اسم الأغنية أو الرابط! (مثال: #ش [اسم الأغنية أو الرابط])")
         return
 
     try:
