@@ -203,11 +203,10 @@ async def broadcast(ctx, *, msg: str = None):
     success_count = 0
     fail_count = 0
 
-    formatted_msg = f"{msg}\n\n— المرسل: {ctx.author.mention}"
-
     for member in ctx.guild.members:
         if member.bot:
             continue
+        formatted_msg = f"{msg}\n\n{member.mention}"
         try:
             await member.send(formatted_msg)
             success_count += 1
@@ -222,7 +221,7 @@ async def broadcast(ctx, *, msg: str = None):
         )
     )
 
-# 3. برودكاست للإدارة فقط (!bca) بالتنسيق الجديد
+# 3. برودكاست للإدارة فقط (!bca)
 @bot.command(
     name="bca",
     aliases=["adminbc"]
@@ -238,11 +237,10 @@ async def admin_broadcast(ctx, *, msg: str = None):
     success_count = 0
     fail_count = 0
 
-    formatted_msg = f"🔒 **[رسالة إدارية]**\n{msg}\n\n— المرسل: {ctx.author.mention}"
-
     for member in ctx.guild.members:
         if member.bot or not member.guild_permissions.administrator:
             continue
+        formatted_msg = f"{msg}\n\n{member.mention}"
         try:
             await member.send(formatted_msg)
             success_count += 1
