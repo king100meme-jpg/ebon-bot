@@ -752,14 +752,19 @@ async def toggle_cmd(ctx, mod_name: str, state: str):
     await ctx.reply(f"⚙️ `{mod_name}` = `{'ON' if data['modules'][mod_name] else 'OFF'}`")
 
 # ==========================================
-# 8. [محفوظ كما هو] أوامر الإرسال والبرودكاست
+# 8. أوامر الإرسال والبرودكاست (سوالف البوت + منشن المستلم)
 # ==========================================
 
 @bot.command(name="say")
 @commands.has_permissions(administrator=True)
-async def say_admin_msg(ctx, member: discord.Member, *, message: str = None):
+async def say_to_channel(ctx, channel_id: int, *, message: str = None):
     if not message:
-        await ctx.reply("❌ يرجى كتابة الرسالة الإدارية بعد منشن الشخص!")
+        await ctx.reply("❌ اكتب آيدي الروم وبعده الكلام اللي تبي البوت يكتبه.")
+        return
+
+    target_channel = bot.get_channel(channel_id) or ctx.guild.get_channel(channel_id)
+    if not isinstance(target_channel, discord.abc.Messageable):
+        await ctx.reply("❌ تأكد من آيدي الروم أو إن البوت يقدر يرسل فيه.")
         return
 
     try:
@@ -767,8 +772,10 @@ async def say_admin_msg(ctx, member: discord.Member, *, message: str = None):
     except discord.HTTPException:
         pass
 
-    formatted_content = f"🔒 **[رسالة إدارية]**\n{message}\n\n— المرسل: {member.mention}"
-    await ctx.send(formatted_content)
+    try:
+        await target_channel.send(message)
+    except discord.HTTPException as err:
+        await ctx.reply(f"❌ ما قدرت أرسل للروم: `{err}`")
 
 @bot.command(name="bc", aliases=["broadcast"])
 @commands.has_permissions(administrator=True)
@@ -828,12 +835,14 @@ async def admin_broadcast(ctx, *, msg: str = None):
         )
     )
 
-@say_admin_msg.error
+@say_to_channel.error
 @broadcast.error
 @admin_broadcast.error
 async def broadcast_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.reply("❌ لا تمتلك صلاحية استخدام هذا الأمر!")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.reply("❌ الصيغة الصحيحة: `!say <آيدي_الروم> <الكلام>`")
 
 # ==========================================
 # 9. تشغيل البوت
