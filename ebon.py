@@ -417,7 +417,7 @@ async def apply_guild_restore(guild: discord.Guild, snap: dict):
 @bot.event
 async def on_ready():
     print(f"✅ Fox Guard شغال: {bot.user}")
-    await bot.change_presence(activity=discord.Game(name="Fox Guard • حماية السيرفر"))
+    await bot.change_presence(activity=discord.Game(name="انا من صنع العم فوكس"))
 
 @bot.event
 async def on_guild_channel_delete(channel):
