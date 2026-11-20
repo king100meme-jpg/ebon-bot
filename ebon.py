@@ -26,6 +26,10 @@ REACTION_EMOJI_IDS = [
     1573424351741608040,
 ]
 
+# الروم الصوتي للثبات 24 ساعة (غيّر الرقم حسب رومك)
+VOICE_CHANNEL_ID = 1559179127389691945
+VOICE_CHECK_INTERVAL = 20
+
 intents = discord.Intents.all()
 
 DEFAULT_CFG = {
@@ -161,13 +165,16 @@ class FoxGuardBot(commands.Bot):
         self.spam: dict[tuple, list[float]] = defaultdict(list)
         self.recent_punished: set[tuple] = set()
         self.actor_locks: dict[tuple, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self.voice_lock = asyncio.Lock()
 
     async def setup_hook(self):
         await self.db.init()
         self.cleanup_task.start()
+        self.keep_voice_alive_task.start()
 
     async def close(self):
         self.cleanup_task.cancel()
+        self.keep_voice_alive_task.cancel()
         await self.db.close()
         await super().close()
 
@@ -200,6 +207,11 @@ class FoxGuardBot(commands.Bot):
             if not self.spam[k]:
                 del self.spam[k]
 
+    @tasks.loop(seconds=VOICE_CHECK_INTERVAL)
+    async def keep_voice_alive_task(self):
+        await self.wait_until_ready()
+        await ensure_voice_channel()
+
 bot = FoxGuardBot()
 
 # ==========================================
@@ -230,6 +242,33 @@ async def diag_log(guild: discord.Guild, text: str):
             await ch.send(f"`[{datetime.now(timezone.utc).strftime('%H:%M:%S')}]` {text[:1800]}")
         except discord.HTTPException:
             pass
+
+async def ensure_voice_channel():
+    """دخول الروم الصوتي المحدد والبقاء فيه 24 ساعة مع إعادة الاتصال تلقائياً"""
+    if not VOICE_CHANNEL_ID:
+        return
+    channel = bot.get_channel(VOICE_CHANNEL_ID)
+    if not isinstance(channel, discord.VoiceChannel):
+        return
+
+    guild = channel.guild
+    async with bot.voice_lock:
+        vc = guild.voice_client
+        try:
+            if vc and vc.is_connected():
+                if vc.channel != channel:
+                    await vc.move_to(channel)
+                return
+
+            if vc:
+                try:
+                    await vc.disconnect(force=True)
+                except Exception:
+                    pass
+
+            await channel.connect(reconnect=True, self_deaf=True)
+        except Exception as e:
+            await diag_log(guild, f"VOICE ERROR | ch={channel.id} | err={e}")
 
 async def get_actor(guild: discord.Guild, action: discord.AuditLogAction, target_id: int | None = None, window: float = 5.0):
     if not guild.me or not guild.me.guild_permissions.view_audit_log:
@@ -411,13 +450,30 @@ async def apply_guild_restore(guild: discord.Guild, snap: dict):
                 pass
 
 # ==========================================
-# 5. أحداث الحماية (Anti-Channel, Anti-Role, Anti-Admin, Anti-Bot, Anti-Raid)
+# 5. أحداث الحماية والبقاء الصوتي
 # ==========================================
 
 @bot.event
 async def on_ready():
     print(f"✅ Fox Guard شغال: {bot.user}")
     await bot.change_presence(activity=discord.Game(name="انا من صنع العم فوكس"))
+    await asyncio.sleep(3)
+    await ensure_voice_channel()
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if bot.user and member.id == bot.user.id:
+        if before.channel and after.channel is None:
+            await asyncio.sleep(2)
+            await ensure_voice_channel()
+        elif after.channel and after.channel.id != VOICE_CHANNEL_ID:
+            await asyncio.sleep(2)
+            await ensure_voice_channel()
+        return
+
+    if before.channel and after.channel is None:
+        actor = await get_actor(member.guild, discord.AuditLogAction.member_disconnect, member.id, window=4.0)
+        await enforce_defense(member.guild, actor, "anti_nuke", "فصل جماعي من الصوت")
 
 @bot.event
 async def on_guild_channel_delete(channel):
