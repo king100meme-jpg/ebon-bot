@@ -246,18 +246,16 @@ async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool
         else f"المتحدث شخص عادي ({user_name}) وليس أبوك، رد عليه ببرود وجلافة مختصرة إنك ما تتكلم إلا مع أبوك: {prompt_text}"
     )
 
-    models_to_try = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
-
-    for model_name in models_to_try:
+    for attempt in range(3):
         try:
             response = await asyncio.wait_for(
                 ai_client.aio.models.generate_content(
-                    model=model_name,
+                    model="gemini-3.8-flash",
                     contents=role_context,
                     config=types.GenerateContentConfig(
                         system_instruction=AI_SYSTEM_PROMPT,
                         temperature=0.85,
-                        max_output_tokens=300,
+                        max_output_tokens=250,
                     ),
                 ),
                 timeout=12.0,
@@ -266,12 +264,13 @@ async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool
             if text:
                 return text[:1900]
         except asyncio.TimeoutError:
-            print(f"AI Error: Timeout on {model_name}")
+            print(f"AI Error: Timeout on gemini-3.8-flash (attempt {attempt + 1})")
         except Exception as e:
-            print(f"AI Error: {model_name} -> {e}")
-            if "503" in str(e) or "UNAVAILABLE" in str(e):
-                await asyncio.sleep(1.0)
+            print(f"AI Error: gemini-3.8-flash (attempt {attempt + 1}) -> {e}")
+            if ("503" in str(e) or "UNAVAILABLE" in str(e)) and attempt < 2:
+                await asyncio.sleep(1.5)
                 continue
+            break
 
     return "بابا، ضغط خفيف على السيرفر الحين، ثواني ونرجع أقوى." if is_father else "ما عندي كلام لك."
 
