@@ -246,7 +246,7 @@ async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool
             else f"المتحدث شخص عادي ({user_name}) وليس أبوك، رد عليه ببرود وجلافة مختصرة إنك ما تتكلم إلا مع أبوك: {prompt_text}"
         )
         response = await ai_client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=role_context,
             config=types.GenerateContentConfig(
                 system_instruction=AI_SYSTEM_PROMPT,
