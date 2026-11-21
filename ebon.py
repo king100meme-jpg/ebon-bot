@@ -245,16 +245,22 @@ async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool
             if is_father
             else f"المتحدث شخص عادي ({user_name}) وليس أبوك، رد عليه ببرود وجلافة مختصرة إنك ما تتكلم إلا مع أبوك: {prompt_text}"
         )
-        response = await ai_client.aio.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=role_context,
-            config=types.GenerateContentConfig(
-                system_instruction=AI_SYSTEM_PROMPT,
-                temperature=0.85,
-                max_output_tokens=300,
+        response = await asyncio.wait_for(
+            ai_client.aio.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=role_context,
+                config=types.GenerateContentConfig(
+                    system_instruction=AI_SYSTEM_PROMPT,
+                    temperature=0.85,
+                    max_output_tokens=300,
+                ),
             ),
+            timeout=12.0,
         )
         return (response.text or ("سم يا بابا، جاهز لأي شي." if is_father else "ما أتكلم إلا مع أبوي.")).strip()[:1900]
+    except asyncio.TimeoutError:
+        print("AI Error: Request timed out after 12s")
+        return "بابا، الاتصال تأخر شوي، جرّب مرة ثانية!" if is_father else "ما عندي وقت لك."
     except Exception as e:
         print(f"AI Error: {e}")
         return "بابا، صار تعليق بسيط في الاتصال، ثواني ونرجع أقوى." if is_father else "ما عندي كلام لك."
@@ -810,7 +816,7 @@ async def restore_cmd(ctx, backup_id: int | None = None):
 async def toggle_cmd(ctx, mod_name: str, state: str):
     data = await bot.cfg(ctx.guild.id, force_reload=True)
     if mod_name not in data["modules"]:
-        return await ctx.reply(f"❌ الوحدات: `{', '.join(data['modules'].keys())}`")
+        return await ctx.reply(f"❌ الوحدات المتاحة: `{', '.join(data['modules'].keys())}`")
     data["modules"][mod_name] = state.lower() in ("on", "true", "1", "تشغيل")
     await bot.set_cfg(ctx.guild.id, data)
     await ctx.reply(f"⚙️ `{mod_name}` = `{'ON' if data['modules'][mod_name] else 'OFF'}`")
