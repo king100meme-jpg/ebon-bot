@@ -2,3 +2,4 @@ discord.py[voice]>=2.3.2
 aiosqlite>=0.19.0
 PyNaCl
 yt-dlp
+google-genai
