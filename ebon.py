@@ -9,6 +9,8 @@ import time
 import aiosqlite
 import discord
 from discord.ext import commands, tasks
+from google import genai
+from google.genai import types
 
 # ==========================================
 # 1. الإعدادات الأساسية
@@ -17,13 +19,14 @@ from discord.ext import commands, tasks
 COMMAND_PREFIX = "!"
 DB_PATH = os.getenv("GUARD_DB_PATH", "fox_guard.db")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# الرياكشن التلقائي (محفوظ كما هو)
+# الرياكشن التلقائي
 REACTION_CHANNEL_ID = 1559179188987109527
 REACTION_EMOJI_IDS = [
-    1564627151246856362,
-    1573424258888245422,
-    1573424351741608040,
+    1573662804978958377,
+    1573662883739603087,
+    1573662926588350549,
 ]
 
 # الروم الصوتي للثبات 24 ساعة (غيّر الرقم حسب رومك)
@@ -32,6 +35,18 @@ VOICE_CHECK_INTERVAL = 20
 
 # روم لوق محاولات التخريب (لوق-تخريب)
 NUKE_LOG_CHANNEL_ID = 1573623918839992370
+
+# آيدي الأب اللي يتكلم معاه البوت ويناديه بابا
+OWNER_FATHER_ID = 292784680330330112
+
+ai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+
+AI_SYSTEM_PROMPT = (
+    "أنت 'فوكس'، حارس السيرفر ومساعده الذكي. "
+    "أسلوبك خشن وله هيبة وثقة عالية، بلهجة خليجية شبابية حماسية، لكنك خفيف، ذكي، سريع بديهة، وإيجابي ومفعم بالطاقة—أبداً مو سلبي ولا ثقيل دم ولا كئيب. "
+    "إذا كان المتحدث هو أبوك، تناديه دايم 'بابا' وتحترمه وتنفّذ أوامره وتجاوبه بنفس الهيبة والخشونة المحببة مع روح حماسية وخفة ظل بدون مياعة. "
+    "إذا كان المتحدث شخص ثاني غير أبوك، ترد عليه بجلافة وبرود خفيف ومختصر وتوضح له إنك ما تسولف إلا مع أبوك، بدون سب أو قذف أو مخالفات لقوانين دسكورد."
+)
 
 intents = discord.Intents.all()
 
@@ -218,8 +233,31 @@ class FoxGuardBot(commands.Bot):
 bot = FoxGuardBot()
 
 # ==========================================
-# 4. أدوات التنفيذ السريع ولوق محاولات التخريب
+# 4. أدوات التنفيذ السريع والذكاء الاصطناعي واللوق
 # ==========================================
+
+async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool) -> str:
+    if not ai_client:
+        return "بابا، مفتاح الذكاء الاصطناعي مو مضاف في الخادم الحين، نركّبه ونولّعها." if is_father else "ما أتكلم إلا مع أبوي."
+    try:
+        role_context = (
+            f"المتحدث هو أبوك ({user_name})، نادِه 'بابا' وجاوبه بحماس وهيبة وخفة بدون سلبية أو ثقل: {prompt_text}"
+            if is_father
+            else f"المتحدث شخص عادي ({user_name}) وليس أبوك، رد عليه ببرود وجلافة مختصرة إنك ما تتكلم إلا مع أبوك: {prompt_text}"
+        )
+        response = await ai_client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=role_context,
+            config=types.GenerateContentConfig(
+                system_instruction=AI_SYSTEM_PROMPT,
+                temperature=0.85,
+                max_output_tokens=300,
+            ),
+        )
+        return (response.text or ("سم يا بابا، جاهز لأي شي." if is_father else "ما أتكلم إلا مع أبوي.")).strip()[:1900]
+    except Exception as e:
+        print(f"AI Error: {e}")
+        return "بابا، صار تعليق بسيط في الاتصال، ثواني ونرجع أقوى." if is_father else "ما عندي كلام لك."
 
 def get_reaction_emojis(guild: discord.Guild):
     emojis = []
@@ -231,7 +269,7 @@ def get_reaction_emojis(guild: discord.Guild):
 async def is_trusted(guild: discord.Guild, user: discord.abc.User | None) -> bool:
     if not user:
         return False
-    if user.id == guild.owner_id or (bot.user and user.id == bot.user.id):
+    if user.id == guild.owner_id or (bot.user and user.id == bot.user.id) or (OWNER_FATHER_ID and user.id == OWNER_FATHER_ID):
         return True
     data = await bot.cfg(guild.id)
     return user.id in data["trusted_users"] or user.id in data["trusted_bots"]
@@ -597,7 +635,7 @@ async def on_member_join(member):
             await activate_panic(guild, data, reason="دخول جماعي سريع (Anti-Raid)")
 
 # ==========================================
-# 6. الرياكشن التلقائي + Anti-Spam + Anti-Link
+# 6. الرياكشن التلقائي + الذكاء الاصطناعي + Anti-Spam + Anti-Link
 # ==========================================
 
 LINK_REGEX = re.compile(
@@ -611,13 +649,32 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
-    # [محفوظ كما هو] الرياكشن التلقائي
+    # الرياكشن التلقائي
     if message.channel.id == REACTION_CHANNEL_ID:
-        for emoji in get_reaction_emojis(message.guild):
+        for idx, emoji in enumerate(get_reaction_emojis(message.guild), start=1):
             try:
                 await message.add_reaction(emoji)
+                await asyncio.sleep(0.3)
             except discord.HTTPException as err:
-                print(f"خطأ الرياكشن ({emoji}): {err}")
+                print(f"❌ خطأ الرياكشن رقم {idx} ({emoji}) | status={err.status} | code={err.code}: {err.text}")
+
+    # الرد بالذكاء الاصطناعي عند منشن البوت أو الرد على رسالته
+    is_mentioned = bot.user in message.mentions
+    is_reply_to_bot = (
+        message.reference
+        and isinstance(message.reference.resolved, discord.Message)
+        and message.reference.resolved.author.id == bot.user.id
+    )
+
+    if is_mentioned or is_reply_to_bot:
+        is_father = OWNER_FATHER_ID != 0 and message.author.id == OWNER_FATHER_ID
+        clean_text = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+        if not clean_text:
+            clean_text = "سم يا بابا؟" if is_father else "وش تبي؟"
+        async with message.channel.typing():
+            reply_text = await generate_rough_reply(message.author.display_name, clean_text, is_father)
+        await message.reply(reply_text, mention_author=True)
+        return
 
     data = await bot.cfg(message.guild.id)
     mods = data["modules"]
@@ -817,7 +874,7 @@ async def broadcast(ctx, *, msg: str = None):
 @commands.has_permissions(administrator=True)
 async def admin_broadcast(ctx, *, msg: str = None):
     if not msg:
-        await ctx.reply("❌ يرجى كتابة الرسالة المراد إرسالها للإدارة!")
+        await ctx.reply("❌ يرجى كتابة الرسالة المراد إرسالها للإداريين فقط!")
         return
 
     status_msg = await ctx.send("⏳ جاري إرسال البرودكاست للإداريين فقط...")
