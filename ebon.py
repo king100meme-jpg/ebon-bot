@@ -20,6 +20,7 @@ COMMAND_PREFIX = "!"
 DB_PATH = os.getenv("GUARD_DB_PATH", "fox_guard.db")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # الرياكشن التلقائي
 REACTION_CHANNEL_ID = 1559179188987109527
@@ -38,6 +39,16 @@ NUKE_LOG_CHANNEL_ID = 1573623918839992370
 
 # آيدي الأب اللي يتكلم معاه البوت ويناديه بابا
 OWNER_FATHER_ID = 292784680330330112
+
+# قائمة الوايت ليست الدائمة (تُدمج تلقائياً في قاعدة البيانات)
+PERMANENT_WHITELIST_USERS = [
+    277573839528001556,
+    1450191311633252464,
+    1409076234905714744,
+    766856376940494879,
+    1137102098085978285,
+    983922758251577435,
+]
 
 ai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
@@ -71,7 +82,7 @@ DEFAULT_CFG = {
         "anti_spam": True,
         "anti_links": True,
     },
-    "trusted_users": [],
+    "trusted_users": list(PERMANENT_WHITELIST_USERS),
     "trusted_bots": [],
     "protected_roles": [],
     "ignored_channels": [],
@@ -118,6 +129,7 @@ class GuardDB:
         async with self._lock:
             async with self.conn.execute("SELECT data FROM configs WHERE guild_id = ?", (guild_id,)) as cur:
                 row = await cur.fetchone()
+
         cfg = json.loads(json.dumps(DEFAULT_CFG))
         if row:
             try:
@@ -125,9 +137,13 @@ class GuardDB:
                 cfg.update({k: v for k, v in loaded.items() if k != "modules"})
                 cfg["modules"].update(loaded.get("modules", {}))
             except json.JSONDecodeError:
-                await self.save_cfg(guild_id, cfg)
-        else:
-            await self.save_cfg(guild_id, cfg)
+                pass
+
+        for uid in PERMANENT_WHITELIST_USERS:
+            if uid not in cfg["trusted_users"]:
+                cfg["trusted_users"].append(uid)
+
+        await self.save_cfg(guild_id, cfg)
         return cfg
 
     async def save_cfg(self, guild_id: int, cfg: dict):
@@ -206,6 +222,9 @@ class FoxGuardBot(commands.Bot):
         return data
 
     async def set_cfg(self, guild_id: int, data: dict):
+        for uid in PERMANENT_WHITELIST_USERS:
+            if uid not in data["trusted_users"]:
+                data["trusted_users"].append(uid)
         await self.db.save_cfg(guild_id, data)
         self.cfg_cache[guild_id] = (time.time(), data)
 
@@ -238,7 +257,11 @@ bot = FoxGuardBot()
 
 async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool) -> str:
     if not ai_client:
-        return "بابا، مفتاح الذكاء الاصطناعي مو مضاف في الخادم الحين، نركّبه ونولّعها." if is_father else "ما أتكلم إلا مع أبوي."
+        return (
+            "بابا، مفتاح الذكاء الاصطناعي مو مضاف في الخادم الحين، نركّبه ونولّعها."
+            if is_father
+            else "ما أتكلم إلا مع أبوي."
+        )
 
     role_context = (
         f"المتحدث هو أبوك ({user_name})، نادِه 'بابا' وجاوبه بحماس وهيبة وخفة بدون سلبية أو ثقل: {prompt_text}"
@@ -251,7 +274,7 @@ async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool
         try:
             response = await asyncio.wait_for(
                 ai_client.aio.models.generate_content(
-                    model="gemini-3.8-flash",
+                    model=GEMINI_MODEL,
                     contents=role_context,
                     config=types.GenerateContentConfig(
                         system_instruction=AI_SYSTEM_PROMPT,
@@ -265,19 +288,23 @@ async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool
             if text:
                 return text[:1900]
         except asyncio.TimeoutError:
-            print(f"AI Error: Timeout on gemini-3.8-flash (attempt {attempt + 1}/{max_retries})")
+            print(f"AI Error: Timeout on {GEMINI_MODEL} (attempt {attempt + 1}/{max_retries})")
             if attempt < max_retries - 1:
                 await asyncio.sleep(1.5 * (attempt + 1))
                 continue
         except Exception as e:
             err_str = str(e)
-            print(f"AI Error: gemini-3.8-flash (attempt {attempt + 1}/{max_retries}) -> {err_str}")
+            print(f"AI Error: {GEMINI_MODEL} (attempt {attempt + 1}/{max_retries}) -> {err_str}")
             if ("503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str) and attempt < max_retries - 1:
                 await asyncio.sleep(1.5 * (attempt + 1))
                 continue
             break
 
-    return "بابا، سيرفرات قوقل مضغوطة حالياً، عطني شوي وجرّب مرة ثانية." if is_father else "ما عندي كلام لك."
+    return (
+        "بابا، سيرفرات قوقل مضغوطة حالياً، عطني شوي وجرّب مرة ثانية."
+        if is_father
+        else "ما عندي كلام لك."
+    )
 
 def get_reaction_emojis(guild: discord.Guild):
     emojis = []
@@ -289,7 +316,12 @@ def get_reaction_emojis(guild: discord.Guild):
 async def is_trusted(guild: discord.Guild, user: discord.abc.User | None) -> bool:
     if not user:
         return False
-    if user.id == guild.owner_id or (bot.user and user.id == bot.user.id) or (OWNER_FATHER_ID and user.id == OWNER_FATHER_ID):
+    if (
+        user.id == guild.owner_id
+        or (bot.user and user.id == bot.user.id)
+        or (OWNER_FATHER_ID and user.id == OWNER_FATHER_ID)
+        or user.id in PERMANENT_WHITELIST_USERS
+    ):
         return True
     data = await bot.cfg(guild.id)
     return user.id in data["trusted_users"] or user.id in data["trusted_bots"]
@@ -404,7 +436,7 @@ async def enforce_defense(
         if trigger_panic_on_multi and total_recent >= 3 and not data["panic"]:
             await activate_panic(guild, data, reason=f"هجوم متزامن من {actor.id}")
 
-        await diag_log(guild, f"لاتخرب السيرفر ياقحبه | <@{actor.id}> (`{actor.id}`) | {reason}")
+        await diag_log(guild, f"تنبيه أمني: محاولة تخريب | <@{actor.id}> (`{actor.id}`) | {reason}")
         return True
 
 def _has_dangerous_perms(perms: discord.Permissions) -> bool:
@@ -688,6 +720,7 @@ async def on_message(message):
         async with message.channel.typing():
             reply_text = await generate_rough_reply(message.author.display_name, clean_text, is_father)
         await message.reply(reply_text, mention_author=True)
+        await bot.process_commands(message)
         return
 
     data = await bot.cfg(message.guild.id)
@@ -799,6 +832,8 @@ async def trust_cmd(ctx, kind: str, action: str, target: str):
             await bot.set_cfg(ctx.guild.id, data)
         await ctx.reply(f"✅ أُضيف `{tid}` إلى `{key}`.")
     elif action.lower() in ("remove", "-", "حذف"):
+        if key == "trusted_users" and tid in PERMANENT_WHITELIST_USERS:
+            return await ctx.reply("⚠️ هذا المستخدم ضمن قائمة الوايت ليست الدائمة في الكود ولا يمكن حذفه بالأمر.")
         if tid in data[key]:
             data[key].remove(tid)
             await bot.set_cfg(ctx.guild.id, data)
@@ -808,126 +843,19 @@ async def trust_cmd(ctx, kind: str, action: str, target: str):
 @trust_guard()
 async def backup_cmd(ctx):
     bid = await bot.db.save_backup(ctx.guild.id, snapshot_guild(ctx.guild))
-    await ctx.reply(f"💾 تم حفظ النسخة الاحتياطية `#{bid}`.")
+    await ctx.reply(f"💾 تم حفظ النسخة الاحتياطية بنجاح برقم `#{bid}`.")
 
 @bot.command(name="restore")
 @trust_guard()
 async def restore_cmd(ctx, backup_id: int | None = None):
     snap = await bot.db.get_backup(ctx.guild.id, backup_id)
     if not snap:
-        return await ctx.reply("❌ لا توجد نسخة احتياطية.")
+        return await ctx.reply("❌ لم يتم العثور على نسخة احتياطية مطابقة.")
+    status_msg = await ctx.reply("⏳ جاري استعادة الرتب والتصنيفات والرومات...")
     await apply_guild_restore(ctx.guild, snap)
-    await ctx.reply("♻️ تمت الاستعادة.")
-
-@bot.command(name="toggle")
-@trust_guard()
-async def toggle_cmd(ctx, mod_name: str, state: str):
-    data = await bot.cfg(ctx.guild.id, force_reload=True)
-    if mod_name not in data["modules"]:
-        return await ctx.reply(f"❌ الوحدات المتاحة: `{', '.join(data['modules'].keys())}`")
-    data["modules"][mod_name] = state.lower() in ("on", "true", "1", "تشغيل")
-    await bot.set_cfg(ctx.guild.id, data)
-    await ctx.reply(f"⚙️ `{mod_name}` = `{'ON' if data['modules'][mod_name] else 'OFF'}`")
-
-# ==========================================
-# 8. أوامر الإرسال والبرودكاست (سوالف البوت + منشن المستلم)
-# ==========================================
-
-@bot.command(name="say")
-@commands.has_permissions(administrator=True)
-async def say_to_channel(ctx, channel_id: int, *, message: str = None):
-    if not message:
-        await ctx.reply("❌ اكتب آيدي الروم وبعده الكلام اللي تبي البوت يكتبه.")
-        return
-
-    target_channel = bot.get_channel(channel_id) or ctx.guild.get_channel(channel_id)
-    if not isinstance(target_channel, discord.abc.Messageable):
-        await ctx.reply("❌ تأكد من آيدي الروم أو إن البوت يقدر يرسل فيه.")
-        return
-
-    try:
-        await ctx.message.delete()
-    except discord.HTTPException:
-        pass
-
-    try:
-        await target_channel.send(message)
-    except discord.HTTPException as err:
-        await ctx.reply(f"❌ ما قدرت أرسل للروم: `{err}`")
-
-@bot.command(name="bc", aliases=["broadcast"])
-@commands.has_permissions(administrator=True)
-async def broadcast(ctx, *, msg: str = None):
-    if not msg:
-        await ctx.reply("❌ يرجى كتابة الرسالة المراد إرسالها للأعضاء!")
-        return
-
-    status_msg = await ctx.send("⏳ جاري إرسال البرودكاست للأعضاء...")
-    success_count = 0
-    fail_count = 0
-
-    for member in ctx.guild.members:
-        if member.bot:
-            continue
-        formatted_msg = f"{msg}\n\n{member.mention}"
-        try:
-            await member.send(formatted_msg)
-            success_count += 1
-        except (discord.Forbidden, discord.HTTPException):
-            fail_count += 1
-
-    await status_msg.edit(
-        content=(
-            "✅ اكتمل برودكاست الأعضاء:\n"
-            f"**تم الإرسال لـ:** {success_count} عضو\n"
-            f"**فشل الإرسال لـ:** {fail_count} عضو"
-        )
-    )
-
-@bot.command(name="bca", aliases=["adminbc"])
-@commands.has_permissions(administrator=True)
-async def admin_broadcast(ctx, *, msg: str = None):
-    if not msg:
-        await ctx.reply("❌ يرجى كتابة الرسالة المراد إرسالها للإداريين فقط!")
-        return
-
-    status_msg = await ctx.send("⏳ جاري إرسال البرودكاست للإداريين فقط...")
-    success_count = 0
-    fail_count = 0
-
-    for member in ctx.guild.members:
-        if member.bot or not member.guild_permissions.administrator:
-            continue
-        formatted_msg = f"{msg}\n\n{member.mention}"
-        try:
-            await member.send(formatted_msg)
-            success_count += 1
-        except (discord.Forbidden, discord.HTTPException):
-            fail_count += 1
-
-    await status_msg.edit(
-        content=(
-            "✅ اكتمل برودكاست الإدارة:\n"
-            f"**تم الإرسال لـ:** {success_count} إداري\n"
-            f"**فشل الإرسال لـ:** {fail_count} إداري"
-        )
-    )
-
-@say_to_channel.error
-@broadcast.error
-@admin_broadcast.error
-async def broadcast_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.reply("❌ لا تمتلك صلاحية استخدام هذا الأمر!")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.reply("❌ الصيغة الصحيحة: `!say <آيدي_الروم> <الكلام>`")
-
-# ==========================================
-# 9. تشغيل البوت
-# ==========================================
+    await status_msg.edit(content="✅ تمت استعادة بيانات السيرفر بنجاح.")
 
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
-        print("❌ خطأ: لم يتم العثور على التوكن في متغيرات البيئة (DISCORD_TOKEN)!")
-    else:
-        bot.run(DISCORD_TOKEN)
+        raise RuntimeError("DISCORD_TOKEN غير مضبوط في متغيرات البيئة.")
+    bot.run(DISCORD_TOKEN)
