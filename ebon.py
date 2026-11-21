@@ -29,9 +29,9 @@ REACTION_EMOJI_IDS = [
     1573662926588350549,
 ]
 
-# الروم الصوتي للثبات 24 ساعة (غيّر الرقم حسب رومك)
+# الروم الصوتي للثبات 24 ساعة
 VOICE_CHANNEL_ID = 1559179127389691945
-VOICE_CHECK_INTERVAL = 20
+VOICE_CHECK_INTERVAL = 60
 
 # روم لوق محاولات التخريب (لوق-تخريب)
 NUKE_LOG_CHANNEL_ID = 1573623918839992370
@@ -239,31 +239,41 @@ bot = FoxGuardBot()
 async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool) -> str:
     if not ai_client:
         return "بابا، مفتاح الذكاء الاصطناعي مو مضاف في الخادم الحين، نركّبه ونولّعها." if is_father else "ما أتكلم إلا مع أبوي."
-    try:
-        role_context = (
-            f"المتحدث هو أبوك ({user_name})، نادِه 'بابا' وجاوبه بحماس وهيبة وخفة بدون سلبية أو ثقل: {prompt_text}"
-            if is_father
-            else f"المتحدث شخص عادي ({user_name}) وليس أبوك، رد عليه ببرود وجلافة مختصرة إنك ما تتكلم إلا مع أبوك: {prompt_text}"
-        )
-        response = await asyncio.wait_for(
-            ai_client.aio.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=role_context,
-                config=types.GenerateContentConfig(
-                    system_instruction=AI_SYSTEM_PROMPT,
-                    temperature=0.85,
-                    max_output_tokens=300,
+
+    role_context = (
+        f"المتحدث هو أبوك ({user_name})، نادِه 'بابا' وجاوبه بحماس وهيبة وخفة بدون سلبية أو ثقل: {prompt_text}"
+        if is_father
+        else f"المتحدث شخص عادي ({user_name}) وليس أبوك، رد عليه ببرود وجلافة مختصرة إنك ما تتكلم إلا مع أبوك: {prompt_text}"
+    )
+
+    models_to_try = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
+
+    for model_name in models_to_try:
+        try:
+            response = await asyncio.wait_for(
+                ai_client.aio.models.generate_content(
+                    model=model_name,
+                    contents=role_context,
+                    config=types.GenerateContentConfig(
+                        system_instruction=AI_SYSTEM_PROMPT,
+                        temperature=0.85,
+                        max_output_tokens=300,
+                    ),
                 ),
-            ),
-            timeout=12.0,
-        )
-        return (response.text or ("سم يا بابا، جاهز لأي شي." if is_father else "ما أتكلم إلا مع أبوي.")).strip()[:1900]
-    except asyncio.TimeoutError:
-        print("AI Error: Request timed out after 12s")
-        return "بابا، الاتصال تأخر شوي، جرّب مرة ثانية!" if is_father else "ما عندي وقت لك."
-    except Exception as e:
-        print(f"AI Error: {e}")
-        return "بابا، صار تعليق بسيط في الاتصال، ثواني ونرجع أقوى." if is_father else "ما عندي كلام لك."
+                timeout=12.0,
+            )
+            text = (response.text or "").strip()
+            if text:
+                return text[:1900]
+        except asyncio.TimeoutError:
+            print(f"AI Error: Timeout on {model_name}")
+        except Exception as e:
+            print(f"AI Error: {model_name} -> {e}")
+            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                await asyncio.sleep(1.0)
+                continue
+
+    return "بابا، ضغط خفيف على السيرفر الحين، ثواني ونرجع أقوى." if is_father else "ما عندي كلام لك."
 
 def get_reaction_emojis(guild: discord.Guild):
     emojis = []
@@ -310,12 +320,6 @@ async def ensure_voice_channel():
                 if vc.channel != channel:
                     await vc.move_to(channel)
                 return
-
-            if vc:
-                try:
-                    await vc.disconnect(force=True)
-                except Exception:
-                    pass
 
             await channel.connect(reconnect=True, self_deaf=True)
         except Exception as e:
