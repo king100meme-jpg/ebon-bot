@@ -30,6 +30,9 @@ REACTION_EMOJI_IDS = [
 VOICE_CHANNEL_ID = 1559179127389691945
 VOICE_CHECK_INTERVAL = 20
 
+# روم لوق محاولات التخريب (لوق-تخريب)
+NUKE_LOG_CHANNEL_ID = 1573623918839992370
+
 intents = discord.Intents.all()
 
 DEFAULT_CFG = {
@@ -215,7 +218,7 @@ class FoxGuardBot(commands.Bot):
 bot = FoxGuardBot()
 
 # ==========================================
-# 4. أدوات التنفيذ السريع واللوق البسيط للتشخيص
+# 4. أدوات التنفيذ السريع ولوق محاولات التخريب
 # ==========================================
 
 def get_reaction_emojis(guild: discord.Guild):
@@ -234,9 +237,13 @@ async def is_trusted(guild: discord.Guild, user: discord.abc.User | None) -> boo
     return user.id in data["trusted_users"] or user.id in data["trusted_bots"]
 
 async def diag_log(guild: discord.Guild, text: str):
-    """لوق بسيط بالحد الأدنى لتشخيص الأحداث الأمنية"""
-    data = await bot.cfg(guild.id)
-    ch = guild.get_channel(data["log_channel_id"]) if data["log_channel_id"] else discord.utils.get(guild.text_channels, name="logs")
+    """لوق محاولات التخريب والأحداث الأمنية"""
+    ch = None
+    if NUKE_LOG_CHANNEL_ID:
+        ch = bot.get_channel(NUKE_LOG_CHANNEL_ID) or guild.get_channel(NUKE_LOG_CHANNEL_ID)
+    if not isinstance(ch, discord.TextChannel):
+        data = await bot.cfg(guild.id)
+        ch = guild.get_channel(data["log_channel_id"]) if data["log_channel_id"] else discord.utils.get(guild.text_channels, name="logs")
     if isinstance(ch, discord.TextChannel):
         try:
             await ch.send(f"`[{datetime.now(timezone.utc).strftime('%H:%M:%S')}]` {text[:1800]}")
@@ -345,7 +352,7 @@ async def enforce_defense(
         if trigger_panic_on_multi and total_recent >= 3 and not data["panic"]:
             await activate_panic(guild, data, reason=f"هجوم متزامن من {actor.id}")
 
-        await diag_log(guild, f"STRIP ROLES | actor={actor.id} | mod={module_key} | reason={reason}")
+        await diag_log(guild, f"لاتخرب السيرفر ياقحبه | <@{actor.id}> (`{actor.id}`) | {reason}")
         return True
 
 def _has_dangerous_perms(perms: discord.Permissions) -> bool:
