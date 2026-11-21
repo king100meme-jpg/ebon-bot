@@ -246,7 +246,8 @@ async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool
         else f"المتحدث شخص عادي ({user_name}) وليس أبوك، رد عليه ببرود وجلافة مختصرة إنك ما تتكلم إلا مع أبوك: {prompt_text}"
     )
 
-    for attempt in range(3):
+    max_retries = 5
+    for attempt in range(max_retries):
         try:
             response = await asyncio.wait_for(
                 ai_client.aio.models.generate_content(
@@ -258,21 +259,25 @@ async def generate_rough_reply(user_name: str, prompt_text: str, is_father: bool
                         max_output_tokens=250,
                     ),
                 ),
-                timeout=12.0,
+                timeout=15.0,
             )
             text = (response.text or "").strip()
             if text:
                 return text[:1900]
         except asyncio.TimeoutError:
-            print(f"AI Error: Timeout on gemini-3.8-flash (attempt {attempt + 1})")
+            print(f"AI Error: Timeout on gemini-3.8-flash (attempt {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
         except Exception as e:
-            print(f"AI Error: gemini-3.8-flash (attempt {attempt + 1}) -> {e}")
-            if ("503" in str(e) or "UNAVAILABLE" in str(e)) and attempt < 2:
-                await asyncio.sleep(1.5)
+            err_str = str(e)
+            print(f"AI Error: gemini-3.8-flash (attempt {attempt + 1}/{max_retries}) -> {err_str}")
+            if ("503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str) and attempt < max_retries - 1:
+                await asyncio.sleep(1.5 * (attempt + 1))
                 continue
             break
 
-    return "بابا، ضغط خفيف على السيرفر الحين، ثواني ونرجع أقوى." if is_father else "ما عندي كلام لك."
+    return "بابا، سيرفرات قوقل مضغوطة حالياً، عطني شوي وجرّب مرة ثانية." if is_father else "ما عندي كلام لك."
 
 def get_reaction_emojis(guild: discord.Guild):
     emojis = []
